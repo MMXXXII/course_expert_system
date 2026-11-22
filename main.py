@@ -1,150 +1,111 @@
-
 import tkinter as tk
 from tkinter import ttk
-from engine import infer
+from engine import recommend
 from rules import RULES
+from courses import COURSES
 
-options = {
-    "interest": {
-        "Программирование": "programming",
-        "Базы данных": "databases",
-        "Искусственный интеллект": "ai",
-        "Английский язык": "languages"
-    },
-    "level": {
-        "Начинающий": "beginner",
-        "Средний": "intermediate",
-        "Продвинутый": "advanced"
-    },
-    "time": {
-        "Мало": "low",
-        "Средне": "medium",
-        "Много": "high"
-    },
-    "budget": {
-        "Бесплатно": "free",
-        "Можно платно": "paid"
-    }
+
+choices = {
+    "topic": {"Программирование": "programming", "Базы данных": "databases", "Искусственный интеллект": "ai", "Английский язык": "languages"},
+    "level": {"Начинающий": 0, "Средний": 1, "Продвинутый": 2},
+    "hours": {"3 часа в неделю": 3, "6 часов в неделю": 6, "10 часов в неделю": 10},
+    "budget": {"0 руб.": 0, "До 5 000 руб.": 5000, "До 10 000 руб.": 10000, "До 15 000 руб.": 15000},
+    "format": {"Онлайн": "online", "Очно": "offline"},
+    "goal": {"Изучить теорию": "theory", "Получить практические навыки": "practice", "Подготовиться к работе": "career"}
+}
+
+labels = {
+    "topic": "Направление", "level": "Уровень подготовки", "hours": "Свободное время в неделю",
+    "budget": "Бюджет на курс", "format": "Формат обучения", "goal": "Цель обучения"
 }
 
 
-def recommend():
-    profile = {
-        key: options[key][boxes[key].get()]
-        for key in options
-    }
+def show_result():
+    profile = {key: choices[key][fields[key].get()] for key in choices}
+    found, checked = recommend(profile)
+    output.config(state="normal")
+    output.delete("1.0", "end")
+    details.config(state="normal")
+    details.delete("1.0", "end")
 
-    facts, fired = infer(profile)
+    if not found:
+        output.insert("end", "Подходящих курсов нет.\n\nПопробуйте увеличить бюджет, количество свободных часов или изменить направление.")
+        details.insert("end", "Проверено курсов: " + str(len(checked)) + "\n\n")
+        for item in checked:
+            if item["course"]["topic"] == profile["topic"]:
+                reasons = [reason for _, reason, _, changes in item["trace"] if changes.get("level_ok") is False or changes.get("budget_ok") is False or changes.get("time_ok") is False]
+                details.insert("end", item["course"]["name"] + ": " + "; ".join(reasons) + "\n")
+    else:
+        output.insert("end", "Найдено подходящих курсов: " + str(len(found)) + "\n\n")
+        for index, item in enumerate(found[:3], 1):
+            course = item["course"]
+            output.insert("end", str(index) + ". " + course["name"] + "\n")
+            output.insert("end", "   Баллы: " + str(item["score"]) + " | Цена: " + str(course["price"]) + " руб. | " + str(course["hours"]) + " ч/нед.\n")
+            output.insert("end", "   Формат: " + ("онлайн" if course["format"] == "online" else "очно") + " | " + str(course["weeks"]) + " недель\n\n")
 
-    result.config(state="normal")
-    result.delete("1.0", "end")
-
-    result.insert(
-        "end",
-        "Рекомендуемый курс:\n" +
-        facts.get("course", "Не найден") + "\n\n"
-    )
-
-    result.insert(
-        "end",
-        "Формат обучения:\n" +
-        facts.get("format", "Не определён") + "\n\n"
-    )
-
-    result.insert("end", "Сработавшие правила:\n\n")
-
-    for number, conditions, new_facts, explanation in fired:
-        result.insert("end", number + ": " + explanation + "\n")
-        result.insert("end", "Новый факт: " + str(new_facts) + "\n\n")
-
-    result.config(state="disabled")
-
-
-def show_rules():
-    window = tk.Toplevel(root)
-    window.title("База знаний")
-    window.geometry("720x520")
-
-    text = tk.Text(window, wrap="word", font=("Arial", 11))
-    text.pack(fill="both", expand=True, padx=10, pady=10)
-
-    for number, conditions, new_facts, explanation in RULES:
-        text.insert(
-            "end",
-            number + "\nЕСЛИ " + str(conditions) +
-            "\nТО " + str(new_facts) +
-            "\n" + explanation + "\n\n"
-        )
-
-    text.config(state="disabled")
+        best = found[0]
+        details.insert("end", "Лучший курс: " + best["course"]["name"] + "\n")
+        details.insert("end", "Набрано баллов: " + str(best["score"]) + "\n\n")
+        details.insert("end", "Ход логического вывода:\n\n")
+        for number, reason, points, changes in best["trace"]:
+            details.insert("end", number + " - " + reason)
+            if points:
+                details.insert("end", " (" + ("+" if points > 0 else "") + str(points) + " баллов)")
+            if changes:
+                details.insert("end", " → " + ", ".join(changes))
+            details.insert("end", "\n")
+    output.config(state="disabled")
+    details.config(state="disabled")
+    tabs.select(0)
 
 
 root = tk.Tk()
-root.title("Экспертная система - Выбор курса")
-root.geometry("780x600")
-root.configure(bg="#f2f6ff")
+root.title("Экспертная система - Выбор учебного курса")
+root.geometry("920x670")
+root.minsize(780, 570)
+root.configure(bg="#eef3fa")
 
-tk.Label(
-    root,
-    text="Экспертная система выбора курса",
-    font=("Arial", 18, "bold"),
-    bg="#f2f6ff"
-).pack(pady=16)
+style = ttk.Style()
+style.theme_use("clam")
+style.configure("TButton", padding=7)
+style.configure("TLabel", background="#eef3fa", font=("Arial", 10))
 
-form = tk.Frame(root, bg="#f2f6ff")
-form.pack(pady=5)
+header = ttk.Label(root, text="Экспертная система выбора учебного курса", font=("Arial", 18, "bold"))
+header.pack(pady=(18, 10))
 
-boxes = {}
+form = ttk.Frame(root)
+form.pack(fill="x", padx=24)
+fields = {}
 
-labels = {
-    "interest": "Интересы",
-    "level": "Уровень подготовки",
-    "time": "Свободное время",
-    "budget": "Бюджет"
-}
+for index, key in enumerate(choices):
+    ttk.Label(form, text=labels[key]).grid(row=index // 2 * 2, column=index % 2, sticky="w", padx=10, pady=(6, 2))
+    fields[key] = ttk.Combobox(form, state="readonly", values=list(choices[key]), width=35)
+    fields[key].current(0)
+    fields[key].grid(row=index // 2 * 2 + 1, column=index % 2, sticky="ew", padx=10, pady=(0, 6))
 
-for key in options:
-    tk.Label(
-        form,
-        text=labels[key],
-        bg="#f2f6ff",
-        font=("Arial", 11)
-    ).pack(anchor="w")
+form.columnconfigure(0, weight=1)
+form.columnconfigure(1, weight=1)
 
-    boxes[key] = ttk.Combobox(
-        form,
-        values=list(options[key]),
-        state="readonly",
-        width=36
-    )
+ttk.Button(root, text="Подобрать курс", command=show_result).pack(pady=12)
 
-    boxes[key].current(0)
-    boxes[key].pack(pady=(3, 10))
+tabs = ttk.Notebook(root)
+tabs.pack(fill="both", expand=True, padx=24, pady=(0, 22))
 
-tk.Button(
-    root,
-    text="Подобрать курс",
-    command=recommend,
-    bg="#2a5db0",
-    fg="white",
-    font=("Arial", 11, "bold")
-).pack(pady=8)
+output = tk.Text(tabs, font=("Arial", 11), wrap="word", padx=12, pady=12)
+details = tk.Text(tabs, font=("Arial", 10), wrap="word", padx=12, pady=12)
+knowledge = tk.Text(tabs, font=("Arial", 10), wrap="word", padx=12, pady=12)
 
-tk.Button(
-    root,
-    text="Показать 44 правила",
-    command=show_rules
-).pack(pady=4)
+tabs.add(output, text="Рекомендации")
+tabs.add(details, text="Объяснение")
+tabs.add(knowledge, text="База знаний")
 
-result = tk.Text(
-    root,
-    height=12,
-    wrap="word",
-    font=("Arial", 11)
-)
+for number, conditions, conclusion, points, reason in RULES:
+    knowledge.insert("end", number + "  ЕСЛИ " + str(conditions) + "\n")
+    knowledge.insert("end", "ТО " + (str(conclusion) if conclusion else "оценка " + str(points)) + "\n")
+    knowledge.insert("end", reason + "\n\n")
 
-result.pack(fill="both", expand=True, padx=20, pady=12)
-result.insert("end", "Выбери параметры и нажми «Подобрать курс».")
-result.config(state="disabled")
-
+knowledge.insert("end", "Всего правил: " + str(len(RULES)) + "\n")
+knowledge.insert("end", "Курсов в каталоге: " + str(len(COURSES)) + "\n")
+knowledge.config(state="disabled")
+show_result()
 root.mainloop()
