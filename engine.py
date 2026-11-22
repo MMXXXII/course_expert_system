@@ -3,36 +3,12 @@ from rules import RULES
 
 
 def check_course(profile, course):
-    if course["level"] == profile["level"]:
-        relation = "same"
-    elif course["level"] < profile["level"]:
-        relation = "lower"
-    else:
-        relation = "higher"
-
-    if course["price"] == 0:
-        budget_state = "free"
-    elif course["price"] <= profile["budget"]:
-        budget_state = "within"
-    else:
-        budget_state = "over"
-
-    if course["hours"] > profile["hours"]:
-        time_state = "over"
-    elif course["hours"] <= profile["hours"] / 2:
-        time_state = "light"
-    else:
-        time_state = "fits"
-
     facts = profile.copy()
     facts.update({
         "course_topic": course["topic"],
         "course_level": course["level"],
         "course_goal": course["goal"],
         "course_format": course["format"],
-        "level_relation": relation,
-        "budget_state": budget_state,
-        "time_state": time_state,
         "format_match": profile["format"] == course["format"],
         "goal_match": profile["goal"] == course["goal"],
         "practice": course["practice"],
@@ -41,23 +17,35 @@ def check_course(profile, course):
         "short_course": course["weeks"] <= 7
     })
 
+    if course["level"] == profile["level"]:
+        facts["level_relation"] = "same"
+    elif course["level"] < profile["level"]:
+        facts["level_relation"] = "lower"
+    else:
+        facts["level_relation"] = "higher"
+
+    if course["price"] == 0:
+        facts["budget_state"] = "free"
+    elif course["price"] <= profile["budget"]:
+        facts["budget_state"] = "within"
+    else:
+        facts["budget_state"] = "over"
+
+    if course["hours"] > profile["hours"]:
+        facts["time_state"] = "over"
+    elif course["hours"] * 2 <= profile["hours"]:
+        facts["time_state"] = "light"
+    else:
+        facts["time_state"] = "fits"
+
     score = 0
     trace = []
-    fired = set()
 
-    while True:
-        changed = False
-        for number, condition, conclusion, points, reason in RULES:
-            if number in fired:
-                continue
-            if all(facts.get(key) == value for key, value in condition.items()):
-                facts.update(conclusion)
-                score += points
-                trace.append((number, reason, points, conclusion))
-                fired.add(number)
-                changed = True
-        if not changed:
-            break
+    for number, conditions, conclusion, points, reason in RULES:
+        if all(facts.get(key) == value for key, value in conditions.items()):
+            facts.update(conclusion)
+            score += points
+            trace.append((number, reason, points, conclusion))
 
     return {"course": course, "score": score, "facts": facts, "trace": trace}
 
